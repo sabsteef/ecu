@@ -35,6 +35,20 @@ class KlineAdapter(Device):
 		self._write(b'\x01')
 		time.sleep(.2)
 		self.ftdi_fn.ftdi_set_bitmode(0, 0x00)
+		self.ftdi_fn.ftdi_usb_purge_buffers()
+
+	def KWP_FastInit(self):
+		self.ftdi_fn.ftdi_set_bitmode(1, 0x00)
+		self._write(b'\x00')
+		time.sleep(.025)
+		self._write(b'\x01')
+		time.sleep(.025)
+		self.ftdi_fn.ftdi_set_bitmode(0, 0x00)
+		self.ftdi_fn.ftdi_usb_purge_buffers()
+		self._write(b"\xc1\x33\xf1\x81\x66")
+		self._read(5)
+		self._read(7)
+		self.ftdi_fn.ftdi_usb_purge_buffers()
 
 class ECU(object):
 
