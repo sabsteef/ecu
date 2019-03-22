@@ -17,9 +17,24 @@ class KlineAdapter(Device):
 		self._write(b'\x00')
 		time.sleep(.002)
 		ret = (self._read(1) == b'\x00')
-		self.ftdi_fn.ftdi_set_bitmode(1, 0x00)
 		self.ftdi_fn.ftdi_set_bitmode(0, 0x00)
 		return ret
+
+	def KWP_SlowInit(self):
+		self.ftdi_fn.ftdi_set_bitmode(1, 0x00)
+		self._write(b'\x00')
+		time.sleep(.2)
+		self._write(b'\x01')
+		time.sleep(.4)
+		self._write(b'\x00')
+		time.sleep(.4)
+		self._write(b'\x01')
+		time.sleep(.4)
+		self._write(b'\x00')
+		time.sleep(.4)
+		self._write(b'\x01')
+		time.sleep(.2)
+		self.ftdi_fn.ftdi_set_bitmode(0, 0x00)
 
 class ECU(object):
 

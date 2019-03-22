@@ -159,8 +159,8 @@ class HondaECU(ECU):
 						return None
 			r += 1
 
-	def ping(self):
-		return self.send_command([0xfe],[0x72], retries=0) != None
+	def ping(self, mode=0x72):
+		return self.send_command([0xfe],[mode], retries=0) != None
 
 	def diag(self):
 		return self.send_command([0x72],[0x00, 0xf0]) != None
@@ -170,7 +170,7 @@ class HondaECU(ECU):
 			t0 = self.send_command([0x72], [0x71, 0x00], retries=0)
 			if t0 is None:
 				self.init()
-				self.ping()
+				self.ping(mode=0xff)
 				t0 = self.send_command([0x72], [0x71, 0x00], retries=0)
 			if t0 is not None:
 				if bytes(t0[2][5:7]) != b"\x00\x00":
