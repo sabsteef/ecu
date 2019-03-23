@@ -13,12 +13,10 @@ class KlineAdapter(Device):
 		self.ftdi_fn.ftdi_usb_purge_buffers()
 
 	def kline(self):
-		self.ftdi_fn.ftdi_set_bitmode(1, 0x00)
-		self._write(b'\x00')
+		self.flush()
+		self._write(b"\xff")
 		time.sleep(.002)
-		ret = (self._read(1) == b'\x00')
-		self.ftdi_fn.ftdi_set_bitmode(0, 0x00)
-		return ret
+		return self._read(1) == b"\xff"
 
 	def KWP_SlowInit(self):
 		self.ftdi_fn.ftdi_set_bitmode(1, 0x00)
