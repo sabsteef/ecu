@@ -105,7 +105,7 @@ class HondaECU(ECU):
 		self.dev.flush()
 		time.sleep(.130)
 
-	def send(self, buf, ml, timeout=.001):
+	def send(self, buf, ml, timeout=.002):
 		self.dev.flush()
 		msg = "".join([chr(b) for b in buf]).encode("latin1")
 		self.dev._write(msg)
@@ -131,7 +131,7 @@ class HondaECU(ECU):
 			if time.time() - to > timeout: return None
 		return buf
 
-	def send_command(self, mtype, data=[], retries=1):
+	def send_command(self, mtype, data=[], retries=10):
 		msg, ml, dl = format_message(mtype, data)
 		r = 0
 		while r <= retries:
@@ -243,7 +243,9 @@ class HondaECU(ECU):
 
 	def do_post_write(self):
 		self.send_command([0x7e], [0x01, 0x09])
+		time.sleep(.5)
 		self.send_command([0x7e], [0x01, 0x0a])
+		time.sleep(.5)
 		self.send_command([0x7e], [0x01, 0x0c])
 		time.sleep(.5)
 		info = self.send_command([0x7e], [0x01, 0x0d])
