@@ -245,7 +245,7 @@ class HondaECU(ECU):
 		self.send_command([0x7e], [0x01, 0x09])
 		self.send_command([0x7e], [0x01, 0x0a])
 		self.send_command([0x7e], [0x01, 0x0c])
-		time.sleep(.1)
+		time.sleep(.5)
 		info = self.send_command([0x7e], [0x01, 0x0d])
 		if info: return (info[2][1] == 0x0f)
 

@@ -15,8 +15,12 @@ class KlineAdapter(Device):
 	def kline(self):
 		self.flush()
 		self._write(b"\xff")
-		time.sleep(.002)
-		return self._read(1) == b"\xff"
+		for _ in range(20):
+			time.sleep(.002)
+			b = self._read(1)
+			if len(b) > 0 and b == b"\xff":
+				return True
+		return False
 
 	def KWP_SlowInit(self):
 		self.ftdi_fn.ftdi_set_bitmode(1, 0x00)
