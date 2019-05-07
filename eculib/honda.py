@@ -1,24 +1,34 @@
 import time
 import struct
-from enum import Enum
+from enum import Enum, auto
 from .base import ECU
 from pydispatch import dispatcher
 
 class ECUSTATE(Enum):
-	UNDEFINED = -1
-	OFF = 0
-	READ = 1
-	READING = 2
-	OK = 3
-	RECOVER_OLD = 4
-	RECOVER_NEW = 5
-	WRITE = 6
-	WRITING = 7
-	ERASING = 8
-	INIT_WRITE = 9
-	INIT_RECOVER = 10
-	ERROR = 11
-	UNKNOWN = 12
+	UNDEFINED = auto()
+	OFF = auto()
+	READ = auto()
+	READING = auto()
+	OK = auto()
+	RECOVER_OLD = auto()
+	RECOVER_NEW = auto()
+	WRITEx00 = auto()
+	WRITEx10 = auto()
+	WRITEx20 = auto()
+	WRITEx30 = auto()
+	WRITEx40 = auto()
+	WRITEx50 = auto()
+	WRITEx0D = auto()
+	WRITEx0F = auto()
+	WRITExFA = auto()
+	WRITING = auto()
+	ERASING = auto()
+	INIT_WRITE = auto()
+	INIT_RECOVER = auto()
+	POSTWRITEx00 = auto()
+	POSTWRITEx0F = auto()
+	POSTWRITEx12 = auto()
+	UNKNOWN = auto()
 
 DTC = {
 	"01-01": "MAP sensor circuit low voltage",
@@ -70,13 +80,13 @@ def checksum8bit(data):
 def validate_checksums(byts, nbyts, cksum):
 	ret = False
 	fixed = False
-	if cksum > 0 and cksum < nbyts:
+	if cksum >= 0 and cksum < nbyts:
 		byts[cksum] = checksum8bitHonda(byts[:cksum]+byts[(cksum+1):])
 		fixed = True
 	ret = checksum8bitHonda(byts)==0
 	return ret, fixed, byts
 
-def do_validation(byts, nbyts, cksum=0):
+def do_validation(byts, nbyts, cksum=-1):
 	status = "good"
 	ret, fixed, byts = validate_checksums(byts, nbyts, cksum)
 	if not ret:
@@ -103,7 +113,7 @@ class HondaECU(ECU):
 		self.dev._write(b'\x01')
 		self.dev.ftdi_fn.ftdi_set_bitmode(0, 0x00)
 		self.dev.flush()
-		time.sleep(.130)
+		time.sleep(.140)
 
 	def send(self, buf, ml, timeout=.002):
 		self.dev.flush()
@@ -131,7 +141,7 @@ class HondaECU(ECU):
 			if time.time() - to > timeout: return None
 		return buf
 
-	def send_command(self, mtype, data=[], retries=10):
+	def send_command(self, mtype, data=[], retries=0):
 		msg, ml, dl = format_message(mtype, data)
 		r = 0
 		while r <= retries:
@@ -158,33 +168,34 @@ class HondaECU(ECU):
 			r += 1
 
 	def ping(self, mode=0x72):
-		return self.send_command([0xfe],[mode], retries=0) != None
+		return self.send_command([0xfe],[mode]) != None
 
 	def diag(self):
 		return self.send_command([0x72],[0x00, 0xf0]) != None
 
 	def detect_ecu_state(self):
-		if self.dev.kline():
-			t0 = self.send_command([0x72], [0x71, 0x00], retries=0)
-			if t0 is None:
-				self.init()
-				self.ping(mode=0xff)
-				t0 = self.send_command([0x72], [0x71, 0x00], retries=0)
+		self.init()
+		self.ping()
+		if self.diag():
+			t0 = self.send_command([0x72], [0x71, 0x00])
 			if t0 is not None:
 				if bytes(t0[2][5:7]) != b"\x00\x00":
 					return ECUSTATE.OK
-			if self.send_command([0x7d], [0x01, 0x01, 0x00], retries=0):
-				return ECUSTATE.RECOVER_OLD
-			if self.send_command([0x7b], [0x00, 0x01, 0x01], retries=0):
-				return ECUSTATE.RECOVER_NEW
-			writestatus = self.send_command([0x7e], [0x01, 0x01, 0x00], retries=0)
-			if writestatus is not None:
-				if writestatus[2][1] == 0xf0:
-					return ECUSTATE.ERROR
-				return ECUSTATE.WRITE
-			readinfo = self.send_command([0x82, 0x82, 0x00], [0x00, 0x00, 0x00, 0x08], retries=0)
+		if self.send_command([0x7d], [0x01, 0x01, 0x03]):
+			return ECUSTATE.RECOVER_OLD
+		if self.send_command([0x7b], [0x00, 0x01, 0x04]):
+			return ECUSTATE.RECOVER_NEW
+		writestatus = self.get_write_status()
+		if writestatus is not None:
+			return ECUSTATE["WRITEx%02X" % writestatus]
+		postwrite = self.send_command([0x7e], [0x01, 0x0d])
+		if postwrite is not None:
+			return ECUSTATE["POSTWRITEx%02X" % postwrite[2][1]]
+		for i in [0x0,0x4000,0x8000]:
+			readinfo = self.send_command([0x82, 0x82, 0x00], format_read(i) + [1])
 			if not readinfo is None:
 				return ECUSTATE.READ
+		if self.dev.kline():
 			return ECUSTATE.UNKNOWN
 		else:
 			return ECUSTATE.OFF
@@ -213,21 +224,31 @@ class HondaECU(ECU):
 		self.send_command([0x7d], [0x01, 0x01, 0x00])
 		self.send_command([0x7d], [0x01, 0x01, 0x01])
 		self.send_command([0x7d], [0x01, 0x01, 0x02])
-		self.send_command([0x72], [0x60, 0x03])
 		self.send_command([0x7d], [0x01, 0x01, 0x03])
 		self.send_command([0x7d], [0x01, 0x02, 0x50, 0x47, 0x4d])
 		self.send_command([0x7d], [0x01, 0x03, 0x2d, 0x46, 0x49])
 
+	def get_write_status(self):
+		status = None
+		info = self.send_command([0x7e], [0x01, 0x01, 0x00])
+		if info:
+			status = info[2][1]
+		return status
+
 	def do_erase(self):
-		self.send_command([0x7e], [0x01, 0x01, 0x00])
+		ret = False
 		self.send_command([0x7e], [0x01, 0x02])
 		self.send_command([0x7e], [0x01, 0x03, 0x00, 0x00])
-		self.send_command([0x7e], [0x01, 0x01, 0x00])
+		self.get_write_status()
 		self.send_command([0x7e], [0x01, 0x0b, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff])
-		self.send_command([0x7e], [0x01, 0x01, 0x00])
-		self.send_command([0x7e], [0x01, 0x0e, 0x01, 0x99])
-		self.send_command([0x7e], [0x01, 0x04, 0xff])
-		return 0
+		self.get_write_status()
+		self.send_command([0x7e], [0x01, 0x0e, 0x01, 0x90])
+		time.sleep(.040)
+		info = self.send_command([0x7e], [0x01, 0x04, 0xff])
+		if info:
+			if info[2][1] == 0x00:
+				ret = True
+		return ret
 
 	def do_erase_wait(self):
 		cont = 1
@@ -240,23 +261,26 @@ class HondaECU(ECU):
 			else:
 				cont = -1
 		if cont == 0:
-			info = self.send_command([0x7e], [0x01, 0x01, 0x00])
+			self.get_write_status()
 
 	def do_post_write(self):
+		ret = False
 		self.send_command([0x7e], [0x01, 0x08])
 		time.sleep(.5)
-		self.send_command([0x7e], [0x01, 0x01, 0x00])
+		self.get_write_status()
 		self.send_command([0x7e], [0x01, 0x09])
 		time.sleep(.5)
-		self.send_command([0x7e], [0x01, 0x01, 0x00])
+		self.get_write_status()
 		self.send_command([0x7e], [0x01, 0x0a])
 		time.sleep(.5)
-		self.send_command([0x7e], [0x01, 0x01, 0x00])
+		self.get_write_status()
 		self.send_command([0x7e], [0x01, 0x0c])
 		time.sleep(.5)
-		self.send_command([0x7e], [0x01, 0x01, 0x00])
-		info = self.send_command([0x7e], [0x01, 0x0d])
-		if info: return (info[2][1] == 0x0f)
+		if self.get_write_status() == 0x0f:
+			info = self.send_command([0x7e], [0x01, 0x0d])
+			if info:
+				ret = (info[2][1] == 0x0f)
+		return ret
 
 	def get_faults(self):
 		faults = {'past':[], 'current':[]}
