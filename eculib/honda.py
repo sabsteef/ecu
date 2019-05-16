@@ -141,7 +141,7 @@ class HondaECU(ECU):
 			if time.time() - to > timeout: return None
 		return buf
 
-	def send_command(self, mtype, data=[], retries=0):
+	def send_command(self, mtype, data=[], retries=10):
 		msg, ml, dl = format_message(mtype, data)
 		r = 0
 		while r <= retries:
