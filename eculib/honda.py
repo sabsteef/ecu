@@ -167,32 +167,32 @@ class HondaECU(ECU):
 						return None
 			r += 1
 
-	def ping(self, mode=0x72):
-		return self.send_command([0xfe],[mode]) != None
+	def ping(self, mode=0x72, retries=0):
+		return self.send_command([0xfe],[mode], retries=retries) != None
 
-	def diag(self):
-		return self.send_command([0x72],[0x00, 0xf0]) != None
+	def diag(self, retries=0):
+		return self.send_command([0x72],[0x00, 0xf0], retries=retries) != None
 
 	def detect_ecu_state(self):
 		self.init()
 		self.ping()
 		if self.diag():
-			t0 = self.send_command([0x72], [0x71, 0x00])
+			t0 = self.send_command([0x72], [0x71, 0x00], retries=0)
 			if t0 is not None:
 				if bytes(t0[2][5:7]) != b"\x00\x00":
 					return ECUSTATE.OK
-		if self.send_command([0x7d], [0x01, 0x01, 0x03]):
+		if self.send_command([0x7d], [0x01, 0x01, 0x03], retries=0):
 			return ECUSTATE.RECOVER_OLD
-		if self.send_command([0x7b], [0x00, 0x01, 0x04]):
+		if self.send_command([0x7b], [0x00, 0x01, 0x04], retries=0):
 			return ECUSTATE.RECOVER_NEW
-		writestatus = self.get_write_status()
+		writestatus = self.get_write_status(retries=0)
 		if writestatus is not None:
 			return ECUSTATE["WRITEx%02X" % writestatus]
-		postwrite = self.send_command([0x7e], [0x01, 0x0d])
+		postwrite = self.send_command([0x7e], [0x01, 0x0d], retries=0)
 		if postwrite is not None:
 			return ECUSTATE["POSTWRITEx%02X" % postwrite[2][1]]
 		for i in [0x0,0x4000,0x8000]:
-			readinfo = self.send_command([0x82, 0x82, 0x00], format_read(i) + [1])
+			readinfo = self.send_command([0x82, 0x82, 0x00], format_read(i) + [1], retries=0)
 			if not readinfo is None:
 				return ECUSTATE.READ
 		if self.dev.kline():
@@ -202,7 +202,7 @@ class HondaECU(ECU):
 
 	def probe_tables(self, tables=None):
 		if not tables:
-			tables = [0x10, 0x11, 0x17, 0x20, 0x21, 0x60, 0x61, 0x67, 0x70, 0x71, 0xd0, 0xd1]
+			tables = [0x10, 0x11, 0x13, 0x17, 0x20, 0x21, 0x60, 0x61, 0x63, 0x67, 0x70, 0x71, 0xd0, 0xd1]
 		ret = {}
 		for t in tables:
 			info = self.send_command([0x72], [0x71, t])
@@ -213,86 +213,86 @@ class HondaECU(ECU):
 				return {}
 		return ret
 
-	def do_init_recover(self):
-		self.send_command([0x7b], [0x00, 0x01, 0x01])
-		self.send_command([0x7b], [0x00, 0x01, 0x02])
-		self.send_command([0x7b], [0x00, 0x01, 0x03])
-		self.send_command([0x7b], [0x00, 0x02, 0x76, 0x03, 0x17])
-		self.send_command([0x7b], [0x00, 0x03, 0x75, 0x05, 0x13])
+	def do_init_recover(self, retries=10):
+		self.send_command([0x7b], [0x00, 0x01, 0x01], retries=retries)
+		self.send_command([0x7b], [0x00, 0x01, 0x02], retries=retries)
+		self.send_command([0x7b], [0x00, 0x01, 0x03], retries=retries)
+		self.send_command([0x7b], [0x00, 0x02, 0x76, 0x03, 0x17], retries=retries)
+		self.send_command([0x7b], [0x00, 0x03, 0x75, 0x05, 0x13], retries=retries)
 
-	def do_init_write(self):
-		self.send_command([0x7d], [0x01, 0x01, 0x00])
-		self.send_command([0x7d], [0x01, 0x01, 0x01])
-		self.send_command([0x7d], [0x01, 0x01, 0x02])
-		self.send_command([0x7d], [0x01, 0x01, 0x03])
-		self.send_command([0x7d], [0x01, 0x02, 0x50, 0x47, 0x4d])
-		self.send_command([0x7d], [0x01, 0x03, 0x2d, 0x46, 0x49])
+	def do_init_write(self, retries=10):
+		self.send_command([0x7d], [0x01, 0x01, 0x00], retries=retries)
+		self.send_command([0x7d], [0x01, 0x01, 0x01], retries=retries)
+		self.send_command([0x7d], [0x01, 0x01, 0x02], retries=retries)
+		self.send_command([0x7d], [0x01, 0x01, 0x03], retries=retries)
+		self.send_command([0x7d], [0x01, 0x02, 0x50, 0x47, 0x4d], retries=retries)
+		self.send_command([0x7d], [0x01, 0x03, 0x2d, 0x46, 0x49], retries=retries)
 
-	def get_write_status(self):
+	def get_write_status(self, retries=10):
 		status = None
-		info = self.send_command([0x7e], [0x01, 0x01, 0x00])
+		info = self.send_command([0x7e], [0x01, 0x01, 0x00], retries=retries)
 		if info:
 			status = info[2][1]
 		return status
 
-	def do_erase(self):
+	def do_erase(self, retries=10):
 		ret = False
-		self.send_command([0x7e], [0x01, 0x02])
-		self.send_command([0x7e], [0x01, 0x03, 0x00, 0x00])
-		self.get_write_status()
-		self.send_command([0x7e], [0x01, 0x0b, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff])
-		self.get_write_status()
-		self.send_command([0x7e], [0x01, 0x0e, 0x01, 0x90])
+		self.send_command([0x7e], [0x01, 0x02], retries=retries)
+		self.send_command([0x7e], [0x01, 0x03, 0x00, 0x00], retries=retries)
+		self.get_write_status(retries=retries)
+		self.send_command([0x7e], [0x01, 0x0b, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff], retries=retries)
+		self.get_write_status(retries=retries)
+		self.send_command([0x7e], [0x01, 0x0e, 0x01, 0x90], retries=retries)
 		time.sleep(.040)
-		info = self.send_command([0x7e], [0x01, 0x04, 0xff])
+		info = self.send_command([0x7e], [0x01, 0x04, 0xff], retries=retries)
 		if info:
 			if info[2][1] == 0x00:
 				ret = True
 		return ret
 
-	def do_erase_wait(self):
+	def do_erase_wait(self, retries=10):
 		cont = 1
 		while cont:
 			time.sleep(.1)
-			info = self.send_command([0x7e], [0x01, 0x05])
+			info = self.send_command([0x7e], [0x01, 0x05], retries=retries)
 			if info:
 				if info[2][1] == 0x00:
 					cont = 0
 			else:
 				cont = -1
 		if cont == 0:
-			self.get_write_status()
+			self.get_write_status(retries=retries)
 
-	def do_post_write(self):
+	def do_post_write(self, retries=10):
 		ret = False
-		self.send_command([0x7e], [0x01, 0x08])
+		self.send_command([0x7e], [0x01, 0x08], retries=retries)
 		time.sleep(.5)
-		self.get_write_status()
-		self.send_command([0x7e], [0x01, 0x09])
+		self.get_write_status(retries=retries)
+		self.send_command([0x7e], [0x01, 0x09], retries=retries)
 		time.sleep(.5)
-		self.get_write_status()
-		self.send_command([0x7e], [0x01, 0x0a])
+		self.get_write_status(retries=retries)
+		self.send_command([0x7e], [0x01, 0x0a], retries=retries)
 		time.sleep(.5)
-		self.get_write_status()
-		self.send_command([0x7e], [0x01, 0x0c])
+		self.get_write_status(retries=retries)
+		self.send_command([0x7e], [0x01, 0x0c], retries=retries)
 		time.sleep(.5)
-		if self.get_write_status() == 0x0f:
-			info = self.send_command([0x7e], [0x01, 0x0d])
+		if self.get_write_status(retries=retries) == 0x0f:
+			info = self.send_command([0x7e], [0x01, 0x0d], retries=retries)
 			if info:
 				ret = (info[2][1] == 0x0f)
 		return ret
 
-	def get_faults(self):
+	def get_faults(self, retries=10):
 		faults = {'past':[], 'current':[]}
 		for i in range(1,0x0c):
-			info_current = self.send_command([0x72],[0x74, i])[2]
+			info_current = self.send_command([0x72],[0x74, i], retries=retries)[2]
 			for j in [3,5,7]:
 				if info_current[j] != 0:
 					faults['current'].append("%02d-%02d" % (info_current[j],info_current[j+1]))
 			if info_current[2] == 0:
 				break
 		for i in range(1,0x0c):
-			info_past = self.send_command([0x72],[0x73, i])[2]
+			info_past = self.send_command([0x72],[0x73, i], retries=retries)[2]
 			for j in [3,5,7]:
 				if info_past[j] != 0:
 					faults['past'].append("%02d-%02d" % (info_past[j],info_past[j+1]))
