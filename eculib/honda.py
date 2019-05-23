@@ -49,7 +49,8 @@ DTC = {
 	"17-01": "No.2 secondary injector circuit malfunction",
 	"18-01": "CMP sensor no signal",
 	"19-01": "CKP sensor no signal",
-	"21-01": "0₂ sensor malfunction",
+	"21-01": "0₂ sensor low voltage",
+	"21-02": "0₂ sensor high voltage",
 	"23-01": "0₂ sensor heater malfunction",
 	"25-02": "Knock sensor circuit malfunction",
 	"25-03": "Knock sensor circuit malfunction",
@@ -58,13 +59,18 @@ DTC = {
 	"34-01": "ECV POT low voltage malfunction",
 	"34-02": "ECV POT high voltage malfunction",
 	"35-01": "EGCA malfunction",
+	"36-01": "A/F sensor malfunction",
+	"38-01": "A/F sensor heater malfunction",
 	"48-01": "No.3 secondary injector circuit malfunction",
 	"49-01": "No.4 secondary injector circuit malfunction",
 	"51-01": "HESD linear solenoid malfunction",
 	"54-01": "Bank angle sensor circuit low voltage",
 	"54-02": "Bank angle sensor circuit high voltage",
 	"56-01": "Knock sensor IC malfunction",
-	"86-01": "Serial communication malfunction"
+	"82-01": "Fast idle solenoid valve malfunction",
+	"86-01": "Serial communication malfunction",
+	"88-01": "EVAP purge control solenoid valve malfunction",
+	"91-01": "Ignition coil primary circuit malfunction"
 }
 
 def format_read(location):
