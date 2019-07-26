@@ -3,6 +3,9 @@ import struct
 from enum import Enum, auto
 from .base import ECU
 from pydispatch import dispatcher
+from array import array
+import pyftdi
+import usb
 
 class ECUSTATE(Enum):
 	UNDEFINED = auto()
@@ -113,43 +116,48 @@ def format_message(mtype, data):
 class HondaECU(ECU):
 
 	def init(self):
-		self.dev.ftdi_fn.ftdi_set_bitmode(1, 0x01)
-		self.dev._write(b'\x00')
+		self.dev.set_bitmode(1, 0x01)
+		self.dev.write_data(b'\x00')
 		time.sleep(.070)
-		self.dev._write(b'\x01')
-		self.dev.ftdi_fn.ftdi_set_bitmode(0, 0x00)
-		self.dev.flush()
-		time.sleep(.140)
+		self.dev.write_data(b'\x01')
+		self.dev.set_bitmode(0, 0x00)
+		time.sleep(.200)
+		self.dev._read()
 
-	def send(self, buf, ml, timeout=.002):
-		self.dev.flush()
+	def send(self, buf, ml, timeout=.1):
 		msg = "".join([chr(b) for b in buf]).encode("latin1")
-		self.dev._write(msg)
-		r = len(msg)
-		timeout = .05 + timeout * r
-		to = time.time()
-		while r > 0:
-			r -= len(self.dev._read(r))
-			if time.time() - to > timeout: return None
-		buf = bytearray()
-		r = ml+1
-		while r > 0:
-			tmp = self.dev._read(r)
-			r -= len(tmp)
-			buf.extend(tmp)
-			if time.time() - to > timeout: return None
-		r = buf[-1]-ml-1
-		to = time.time()
-		while r > 0:
-			tmp = self.dev._read(r)
-			r -= len(tmp)
-			buf.extend(tmp)
-			if time.time() - to > timeout: return None
-		return buf
+		mlen = len(msg)
+		self.dev.write_data(msg)
+		readbuffer = array('B')
+		r = mlen + ml + 1
+		starttime = time.time()
+		while len(readbuffer) < r:
+			tempbuf = self.dev._read()
+			length = len(tempbuf)
+			i = 0
+			if length > 2:
+				while i < length:
+					readbuffer += tempbuf[(i+2):(i+64)]
+					i += 64
+			if time.time() - starttime > timeout:
+				return None
+		r = mlen + readbuffer[r-1]
+		while len(readbuffer) < r:
+			tempbuf = self.dev._read()
+			length = len(tempbuf)
+			i = 0
+			if length > 2:
+				while i < length:
+					readbuffer += tempbuf[(i+2):(i+64)]
+					i += 64
+			if time.time() - starttime > timeout:
+				return None
+		return readbuffer[mlen:].tostring()
 
 	def send_command(self, mtype, data=[], retries=10):
 		msg, ml, dl = format_message(mtype, data)
 		r = 0
+		ret = None
 		while r <= retries:
 			dispatcher.send(signal="ecu.debug", sender=self, msg="%d > [%s]" % (r, ", ".join(["%02x" % m for m in msg])))
 			resp = self.send(msg, ml)
@@ -168,16 +176,16 @@ class HondaECU(ECU):
 						rml = resp[ml:(ml+1)]
 						rdl = ord(rml) - 2 - len(rmtype)
 						rdata = resp[(ml+1):-1]
-						return (rmtype, rml, rdata, rdl)
-					else:
-						return None
+						ret = (rmtype, rml, rdata, rdl)
+						break
 			r += 1
+		return ret
 
 	def ping(self, mode=0x72, retries=0):
 		return self.send_command([0xfe],[mode], retries=retries) != None
 
-	def diag(self, retries=0):
-		return self.send_command([0x72],[0x00, 0xf0], retries=retries) != None
+	def diag(self, mode=0xf0, retries=0):
+		return self.send_command([0x72],[0x00, mode], retries=retries) != None
 
 	def detect_ecu_state(self):
 		self.init()
@@ -190,6 +198,10 @@ class HondaECU(ECU):
 		if self.send_command([0x7d], [0x01, 0x01, 0x03], retries=0):
 			return ECUSTATE.RECOVER_OLD
 		if self.send_command([0x7b], [0x00, 0x01, 0x04], retries=0):
+			return ECUSTATE.RECOVER_NEW
+		if self.send_command([0x7d], [0x01, 0x01, 0x00], retries=0):
+			return ECUSTATE.RECOVER_OLD
+		if self.send_command([0x7b], [0x00, 0x01, 0x00], retries=0):
 			return ECUSTATE.RECOVER_NEW
 		writestatus = self.get_write_status(retries=0)
 		if writestatus is not None:
@@ -220,17 +232,10 @@ class HondaECU(ECU):
 		return ret
 
 	def do_init_recover(self, retries=10):
-		self.send_command([0x7b], [0x00, 0x01, 0x01], retries=retries)
-		self.send_command([0x7b], [0x00, 0x01, 0x02], retries=retries)
-		self.send_command([0x7b], [0x00, 0x01, 0x03], retries=retries)
 		self.send_command([0x7b], [0x00, 0x02, 0x76, 0x03, 0x17], retries=retries)
 		self.send_command([0x7b], [0x00, 0x03, 0x75, 0x05, 0x13], retries=retries)
 
 	def do_init_write(self, retries=10):
-		self.send_command([0x7d], [0x01, 0x01, 0x00], retries=retries)
-		self.send_command([0x7d], [0x01, 0x01, 0x01], retries=retries)
-		self.send_command([0x7d], [0x01, 0x01, 0x02], retries=retries)
-		self.send_command([0x7d], [0x01, 0x01, 0x03], retries=retries)
 		self.send_command([0x7d], [0x01, 0x02, 0x50, 0x47, 0x4d], retries=retries)
 		self.send_command([0x7d], [0x01, 0x03, 0x2d, 0x46, 0x49], retries=retries)
 
