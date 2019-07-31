@@ -325,20 +325,20 @@ class HondaECU(ECU):
 
 	def _read_flash_bytes(self, location, size=12):
 		info = self.send_command([0x82, 0x82, 0x00], format_read(location) + [size])
-		if struct.unpack("<B",info[1])[0] == size + 5:
+		if info and struct.unpack("<B",info[1])[0] == size + 5:
 			return info[2]
 		return None
 
 	def _read_ram_bytes(self, location, size=12):
 		info = self.send_command([0x82, 0x82, 0x04], list(struct.unpack("<2B",struct.pack("<H", location))) + [size])
-		if struct.unpack("<B",info[1])[0] == size + 5:
+		if info and struct.unpack("<B",info[1])[0] == size + 5:
 			return struct.unpack("<%sB" % size, info[2])
 		return None
 
 	def _read_ram_words(self, location, size=6):
 		size2 = size * 2
 		info = self.send_command([0x82, 0x82, 0x05], list(struct.unpack("<2B",struct.pack("<H", location))) + [size])
-		if struct.unpack("<B",info[1])[0] == size2 + 5:
+		if info and struct.unpack("<B",info[1])[0] == size2 + 5:
 			return struct.unpack("<%sB" % size2, struct.pack("<%sH" % size, *struct.unpack(">%sH" % size, info[2])))
 		return None
 
