@@ -8,8 +8,8 @@ import pyftdi
 import usb
 
 class ECUSTATE(Enum):
-	UNDEFINED = auto()
 	OFF = auto()
+	UNKNOWN = auto()
 	READ = auto()
 	READING = auto()
 	OK = auto()
@@ -31,7 +31,6 @@ class ECUSTATE(Enum):
 	POSTWRITEx00 = auto()
 	POSTWRITEx0F = auto()
 	POSTWRITEx12 = auto()
-	UNKNOWN = auto()
 
 DTC = {
 	"01-01": "MAP sensor circuit low voltage",
@@ -125,36 +124,40 @@ class HondaECU(ECU):
 		self.dev._read()
 
 	def send(self, buf, ml, timeout=.1):
-		msg = "".join([chr(b) for b in buf]).encode("latin1")
-		mlen = len(msg)
-		self.dev.write_data(msg)
-		readbuffer = array('B')
-		r = mlen + ml + 1
-		starttime = time.time()
-		while len(readbuffer) < r:
-			tempbuf = self.dev._read()
-			length = len(tempbuf)
-			i = 0
-			if length > 2:
-				while i < length:
-					readbuffer += tempbuf[(i+2):(i+64)]
-					i += 64
-			if time.time() - starttime > timeout:
-				return None
-		r = mlen + readbuffer[r-1]
-		while len(readbuffer) < r:
-			tempbuf = self.dev._read()
-			length = len(tempbuf)
-			i = 0
-			if length > 2:
-				while i < length:
-					readbuffer += tempbuf[(i+2):(i+64)]
-					i += 64
-			if time.time() - starttime > timeout:
-				return None
-		return readbuffer[mlen:].tostring()
+		try:
+			msg = "".join([chr(b) for b in buf]).encode("latin1")
+			mlen = len(msg)
+			self.dev.write_data(msg)
+			readbuffer = array('B')
+			r = mlen + ml + 1
+			starttime = time.time()
+			while len(readbuffer) < r:
+				tempbuf = self.dev._read()
+				length = len(tempbuf)
+				i = 0
+				if length > 2:
+					while i < length:
+						readbuffer += tempbuf[(i+2):(i+64)]
+						i += 64
+				if time.time() - starttime > timeout:
+					return None
+			r = mlen + readbuffer[r-1]
+			while len(readbuffer) < r:
+				tempbuf = self.dev._read()
+				length = len(tempbuf)
+				i = 0
+				if length > 2:
+					while i < length:
+						readbuffer += tempbuf[(i+2):(i+64)]
+						i += 64
+				if time.time() - starttime > timeout:
+					return None
+			return readbuffer[mlen:].tostring()
+		except:
+			pass
+		return None
 
-	def send_command(self, mtype, data=[], retries=10):
+	def send_command(self, mtype, data=[], retries=1):
 		msg, ml, dl = format_message(mtype, data)
 		r = 0
 		ret = None
@@ -232,10 +235,17 @@ class HondaECU(ECU):
 		return ret
 
 	def do_init_recover(self, retries=10):
+		# self.send_command([0x7b], [0x00, 0x01, 0x01], retries=retries)
+		# self.send_command([0x7b], [0x00, 0x01, 0x02], retries=retries)
+		# self.send_command([0x7b], [0x00, 0x01, 0x03], retries=retries)
 		self.send_command([0x7b], [0x00, 0x02, 0x76, 0x03, 0x17], retries=retries)
 		self.send_command([0x7b], [0x00, 0x03, 0x75, 0x05, 0x13], retries=retries)
 
 	def do_init_write(self, retries=10):
+		# self.send_command([0x7d], [0x01, 0x01, 0x00], retries=retries)
+		# self.send_command([0x7d], [0x01, 0x01, 0x01], retries=retries)
+		# self.send_command([0x7d], [0x01, 0x01, 0x02], retries=retries)
+		# self.send_command([0x7d], [0x01, 0x01, 0x03], retries=retries)
 		self.send_command([0x7d], [0x01, 0x02, 0x50, 0x47, 0x4d], retries=retries)
 		self.send_command([0x7d], [0x01, 0x03, 0x2d, 0x46, 0x49], retries=retries)
 
@@ -310,3 +320,27 @@ class HondaECU(ECU):
 			if info_past[2] == 0:
 				break
 		return faults
+
+	############################################################################
+
+	def _read_flash_bytes(self, location, size=12):
+		info = self.send_command([0x82, 0x82, 0x00], format_read(location) + [size])
+		if struct.unpack("<B",info[1])[0] == size + 5:
+			return info[2]
+		return None
+
+	def _read_ram_bytes(self, location, size=12):
+		info = self.send_command([0x82, 0x82, 0x04], list(struct.unpack("<2B",struct.pack("<H", location))) + [size])
+		if struct.unpack("<B",info[1])[0] == size + 5:
+			return struct.unpack("<%sB" % size, info[2])
+		return None
+
+	def _read_ram_words(self, location, size=6):
+		size2 = size * 2
+		info = self.send_command([0x82, 0x82, 0x05], list(struct.unpack("<2B",struct.pack("<H", location))) + [size])
+		if struct.unpack("<B",info[1])[0] == size2 + 5:
+			return struct.unpack("<%sB" % size2, struct.pack("<%sH" % size, *struct.unpack(">%sH" % size, info[2])))
+		return None
+
+	def _format_eeprom(self):
+		self.send_command([0x82, 0x82, 0x19])
