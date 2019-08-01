@@ -8,7 +8,7 @@ class KlineAdapter(Ftdi):
 
 	def __init__(self, device, baudrate=10400):
 		super(KlineAdapter, self).__init__()
-		self.open(device)
+		self.open_from_device(device)
 		self.set_baudrate(baudrate)
 		self.set_line_property(8, 1, "N")
 
@@ -27,23 +27,6 @@ class KlineAdapter(Ftdi):
 				break
 		self.purge_buffers()
 		return ret
-
-	def open(self, dev, interface=1):
-		self.usb_dev = dev
-		try:
-			self.usb_dev.set_configuration()
-		except usb.core.USBError:
-			pass
-		# detect invalid interface as early as possible
-		config = self.usb_dev.get_active_configuration()
-		if interface > config.bNumInterfaces:
-			raise FtdiError('No such FTDI port: %d' % interface)
-		self._set_interface(config, interface)
-		self.max_packet_size = self._get_max_packet_size()
-		# Drain input buffer
-		self.purge_buffers()
-		self._reset_device()
-		self.set_latency_timer(Ftdi.LATENCY_MIN)
 
 class ECU(object):
 
