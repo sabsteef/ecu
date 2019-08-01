@@ -361,5 +361,11 @@ class HondaECU(ECU):
 				return True, info[2]
 		return False, None
 
+	def _read_eeprom_word(self, location):
+		info = self.send_command([0x82, 0x82, 0x10], list(struct.unpack("<2B",struct.pack("<H", location))))
+		if info and struct.unpack("<B",info[1])[0] == 7:
+			return True, struct.unpack("<2B", info[2])
+		return False, None
+
 	def _format_eeprom(self):
 		self.send_command([0x82, 0x82, 0x19])
