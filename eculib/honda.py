@@ -327,35 +327,39 @@ class HondaECU(ECU):
 		if size <= 12:
 			info = self.send_command([0x82, 0x82, 0x00], format_read(location) + [size])
 			if info and struct.unpack("<B",info[1])[0] == size + 5:
-				return info[2]
-		return None
+				return True, info[2]
+		return False, None
 
 	def _read_ram_bytes(self, location, size=12):
 		if size <= 12:
 			info = self.send_command([0x82, 0x82, 0x04], list(struct.unpack("<2B",struct.pack("<H", location))) + [size])
 			if info and struct.unpack("<B",info[1])[0] == size + 5:
-				return struct.unpack("<%sB" % size, info[2])
-		return None
+				return True, struct.unpack("<%sB" % size, info[2])
+		return False, None
 
 	def _read_ram_words(self, location, size=6):
-		if size <= 6:
-			size2 = size * 2
+		size2 = size * 2
+		if size % 2 == 0 and size <= 6:
 			info = self.send_command([0x82, 0x82, 0x05], list(struct.unpack("<2B",struct.pack("<H", location))) + [size])
 			if info and struct.unpack("<B",info[1])[0] == size2 + 5:
-				return struct.unpack("<%sB" % size2, struct.pack("<%sH" % size, *struct.unpack(">%sH" % size, info[2])))
-		return None
+				return True, struct.unpack("<%sB" % size2, struct.pack("<%sH" % size, *struct.unpack(">%sH" % size, info[2])))
+		return False, None
 
 	def _write_ram_bytes(self, location, data):
 		size = len(data)
 		if size <= 12:
-			info = self.send_command([0x82, 0x82, 0x08], [size] + list(struct.unpack("<%sB" % size, data)))
-			if info:
-				return info[2]
-		return None
+			info = self.send_command([0x82, 0x82, 0x08], list(struct.unpack("<2B",struct.pack("<H", location))) + list(struct.unpack("<%sB" % size, data)) + [size])
+			if info and struct.unpack("<B",info[1])[0] == 5:
+				return True, info[2]
+		return False, None
 
-	# def _read_unk1_words(self, unk1, size=6):
-	# 	info = self.send_command([0x82, 0x82, 0x04], unk1 + [size])
-	# 	return None
+	def _write_ram_words(self, location, data):
+		size = len(data)
+		if size % 2 == 0 and size / 2 <= 6:
+			info = self.send_command([0x82, 0x82, 0x08], list(struct.unpack("<2B",struct.pack("<H", location))) + list(struct.unpack("<%sB" % size, data)) + [size])
+			if info and struct.unpack("<B",info[1])[0] == 5:
+				return True, info[2]
+		return False, None
 
 	def _format_eeprom(self):
 		self.send_command([0x82, 0x82, 0x19])
