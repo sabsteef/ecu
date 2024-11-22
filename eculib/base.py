@@ -5,7 +5,7 @@ import time
 
 class KlineAdapter(Device):
 
-	def __init__(self, device_id, baudrate=38400):
+	def __init__(self, device_id, baudrate=10400):
 		super(KlineAdapter, self).__init__(device_id, auto_detach=(platform.system()!="Windows"))
 		self.baudrate = baudrate
 		self.ftdi_fn.ftdi_usb_reset()
